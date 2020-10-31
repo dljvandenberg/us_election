@@ -1,0 +1,172 @@
+---
+title: "US Presidential Election 2020"
+author: "Dennis van den Berg"
+date: "10/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      fig.height = 5,
+                      fig.width = 7)
+
+library(tidyverse)
+library(lubridate)
+
+
+## SETTINGS
+
+polls_url <- 'https://projects.fivethirtyeight.com/polls-page/president_polls.csv'
+
+
+## FUNCTIONS
+
+# Calculates percentage difference between candidate1 and candidate2, per poll
+calc_candidate_gap <- function(df_polls, 
+                               candidate1 = 'Joseph R. Biden Jr.', 
+                               candidate2 = 'Donald Trump', 
+                               vars_to_keep = c('state', 'start_date', 'fte_grade')){
+  grouping_vars <- c('question_id', vars_to_keep)
+  
+  df_polls_diff <- df_polls %>% 
+    dplyr::group_by_(.dots = grouping_vars) %>% 
+    summarise(pct_diff = first(pct[candidate_name == candidate1]) - first(pct[candidate_name == candidate2]), .groups = 'drop') %>%
+    arrange(start_date)  
+  
+  return(df_polls_diff)
+}
+
+
+# Generates dataframe with cols 'state', 'winner' and additional info
+predict_state_winners <- function(df_polls,
+                                  candidate1 = 'Joseph R. Biden Jr.', 
+                                  candidate2 = 'Donald Trump',
+                                  candidate1_poll_bias = +3.2){
+  
+  df_state_winners <- df_polls %>% 
+    calc_candidate_gap(., candidate1 = candidate1, candidate2 = candidate2) %>%
+    group_by(state) %>% 
+    summarise(
+      n_polls = n(),
+      first_poll = min(start_date),
+      last_poll = max(start_date),
+      mean_pct_diff = mean(pct_diff),
+      .groups = 'drop'
+    ) %>% 
+    ungroup() %>%
+    mutate(mean_pct_diff_corrected = mean_pct_diff - candidate1_poll_bias) %>% 
+    mutate(winner = case_when(
+      (mean_pct_diff_corrected > 0) ~ candidate1,
+      (mean_pct_diff_corrected < 0) ~ candidate2,
+      (mean_pct_diff_corrected == 0) ~ 'tie'
+    ))
+  
+  return(df_state_winners)
+}
+```
+
+
+
+
+```{r}
+# DATA
+df_polls <- readr::read_delim(polls_url, col_types = cols(), delim = ',') %>% 
+  mutate_at(c('start_date', 'end_date', 'election_date'), mdy)
+```
+
+
+
+# ANALYSIS: Pennsylvania Polls
+
+
+## Histograms of % votes per candidate
+
+```{r}
+year_selected <- 2020
+state_selected <- 'Pennsylvania'
+begin_date <- ymd('2020-09-14')
+
+title <- paste0(state_selected, ' Polls ', year_selected,  ' (Pollsters rated A- or higher)')
+df_polls %>% 
+  filter(cycle == year_selected) %>%
+  filter(state == state_selected) %>%  
+  filter(str_detect(fte_grade, '^(A)')) %>% 
+  #filter(population == 'lv') %>% 
+  filter(start_date >= begin_date) %>% 
+  {ggplot(., aes(x = pct, fill = candidate_name)) +
+      geom_histogram(binwidth = 1, alpha = 0.6, position = position_identity()) +
+      ggtitle(title)}
+```
+
+
+```{r}
+year_selected <- 2020
+state_selected <- 'Pennsylvania'
+
+title <- paste0(state_selected, ' Polls ', year_selected,  ' (Pollsters rated B- or higher)')
+df_polls %>% 
+  filter(cycle == year_selected) %>%
+  filter(state == state_selected) %>% 
+  filter(str_detect(fte_grade, '^(A|B)')) %>% 
+  filter(start_date >= ymd('2020-09-01')) %>% 
+  {ggplot(., aes(x = pct, fill = candidate_name)) +
+      geom_histogram(binwidth = 1, alpha = 0.6, position = position_identity()) +
+      ggtitle(title)}
+```
+
+
+
+## Biden-Trump gap histograms
+
+```{r}
+year_selected <- 2020
+states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')[1:5]
+begin_date <- ymd('2020-10-13')
+min_sample_size <- 400
+historical_bias_2016 <- + 3.2
+
+df_polls %>% 
+  filter(cycle == year_selected) %>%
+  filter(state %in% states_selected) %>% 
+  filter(str_detect(fte_grade, '^(A|B|C|D)')) %>% 
+  filter(sample_size >= min_sample_size) %>% 
+  filter(start_date >= begin_date) %>% 
+  filter(population == 'lv') %>% 
+  calc_candidate_gap(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump') %>%
+  mutate(pollster_rating = str_extract(fte_grade, '^.')) %>% 
+  {ggplot(., aes(x = pct_diff)) +
+      geom_histogram(binwidth = 1, aes(fill = pollster_rating), color = 'grey', alpha = 0.8) +
+      #geom_histogram(binwidth = 1, fill = 'darkred', color = 'grey', alpha = 0.6) +
+      geom_vline(xintercept = historical_bias_2016, linetype = 2, size = .5) +
+      facet_grid(state ~ ., scales = 'free_y') +
+      scale_x_continuous(labels = function(x) paste0(x, "%")) +
+      xlab('Biden-Trump gap') +
+      ggtitle('Biden-Trump gap per state', 
+              subtitle = paste0('Likely voter polls since ', begin_date, ' with sample size >= ', min_sample_size))}
+```
+
+The dotted line in the graph represents the average polling bias for the 2016 presidential election, in which polls generally underestimated Trump votes by 3.2%. [Source: https://fivethirtyeight.com/features/the-polls-are-all-right/]
+
+
+
+```{r}
+year_selected <- 2020
+states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')
+begin_date <- ymd('2020-10-01')
+min_sample_size <- 400
+historical_bias_2016 <- + 3.2
+
+
+df_state_winners <- df_polls %>% 
+  filter(cycle == year_selected) %>%
+  filter(state %in% states_selected) %>% 
+  filter(str_detect(fte_grade, '^(A|B|C)')) %>% 
+  filter(sample_size >= min_sample_size) %>% 
+  filter(start_date >= begin_date) %>% 
+  filter(population == 'lv') %>% 
+  predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_poll_bias = +3.2)
+
+df_state_winners
+```
+
