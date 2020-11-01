@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = FALSE,
 
 library(tidyverse)
 library(lubridate)
+library(MASS)
 
 
 ## SETTINGS
@@ -31,7 +32,8 @@ calc_candidate_gap <- function(df_polls,
   
   df_polls_diff <- df_polls %>% 
     dplyr::group_by_(.dots = grouping_vars) %>% 
-    summarise(pct_diff = first(pct[candidate_name == candidate1]) - first(pct[candidate_name == candidate2]), .groups = 'drop') %>%
+    summarise(pct_diff = first(pct[candidate_name == candidate1]) - first(pct[candidate_name == candidate2]), .groups = 'drop') %>% 
+    drop_na(pct_diff) %>%
     arrange(start_date)  
   
   return(df_polls_diff)
@@ -39,27 +41,30 @@ calc_candidate_gap <- function(df_polls,
 
 
 # Generates dataframe with cols 'state', 'winner' and additional info
+# by fitting a T-distribution on state poll data
 predict_state_winners <- function(df_polls,
                                   candidate1 = 'Joseph R. Biden Jr.', 
                                   candidate2 = 'Donald Trump',
-                                  candidate1_poll_bias = +3.2){
+                                  candidate1_bias = 0){
   
   df_state_winners <- df_polls %>% 
     calc_candidate_gap(., candidate1 = candidate1, candidate2 = candidate2) %>%
-    group_by(state) %>% 
-    summarise(
-      n_polls = n(),
-      first_poll = min(start_date),
-      last_poll = max(start_date),
-      mean_pct_diff = mean(pct_diff),
-      .groups = 'drop'
+    nest_by(state) %>% 
+    mutate(n = length(data$pct_diff),
+           first = min(data$start_date),
+           last = max(data$start_date),
+           mean = mean(data$pct_diff),
+           sd = sd(data$pct_diff),
+           tdist_params = list(MASS::fitdistr(data$pct_diff, densfun = 't', start = list(m=mean,s=sd, df=n), lower=c(-1, 0.001,1))$estimate)
     ) %>% 
-    ungroup() %>%
-    mutate(mean_pct_diff_corrected = mean_pct_diff - candidate1_poll_bias) %>% 
+    mutate(tdist_m = tdist_params[['m']],
+           tdist_s = tdist_params[['s']],
+           tdist_df = tdist_params[['df']]) %>% 
+    mutate(tdist_m_corrected = tdist_m - candidate1_bias) %>% 
     mutate(winner = case_when(
-      (mean_pct_diff_corrected > 0) ~ candidate1,
-      (mean_pct_diff_corrected < 0) ~ candidate2,
-      (mean_pct_diff_corrected == 0) ~ 'tie'
+      (tdist_m_corrected > 0) ~ candidate1,
+      (tdist_m_corrected < 0) ~ candidate2,
+      (tdist_m_corrected == 0) ~ 'tie'
     ))
   
   return(df_state_winners)
@@ -152,10 +157,10 @@ The dotted line in the graph represents the average polling bias for the 2016 pr
 
 ```{r}
 year_selected <- 2020
-states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')
+states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')[1:4]
 begin_date <- ymd('2020-10-01')
 min_sample_size <- 400
-historical_bias_2016 <- + 3.2
+candidate1_bias <- + 3.2
 
 
 df_state_winners <- df_polls %>% 
@@ -165,8 +170,15 @@ df_state_winners <- df_polls %>%
   filter(sample_size >= min_sample_size) %>% 
   filter(start_date >= begin_date) %>% 
   filter(population == 'lv') %>% 
-  predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_poll_bias = +3.2)
+  predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_bias = candidate1_bias)
 
 df_state_winners
 ```
+
+
+# TODO
+
+- Add probabilities
+- Fix fit issue when insufficient data points
+
 
