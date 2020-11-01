@@ -86,7 +86,7 @@ df_polls <- readr::read_delim(polls_url, col_types = cols(), delim = ',') %>%
 
 
 
-# ANALYSIS: Pennsylvania Polls
+# Analysis
 
 
 ## Histograms of % votes per candidate
@@ -179,6 +179,17 @@ df_state_winners <- df_polls %>%
   predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_bias = candidate1_bias)
 
 df_state_winners %>% 
-  dplyr::select(state, n, mean, sd, candidate1_bias, p_candidate1, t_stat, winner)
+  {ggplot(., aes(x = reorder(state, p_candidate1), y = p_candidate1)) +
+      geom_col(aes(fill = winner)) +
+      scale_y_continuous(labels = scales::percent) +
+      coord_flip() +
+      xlab('') +
+      ylab('Biden win probability') +
+      ggtitle('Biden win probabilities',
+              subtitle = paste0('Assuming DEM polling bias of ', candidate1_bias))}
+
+df_state_winners %>% 
+  dplyr::select(state, n, mean, sd, candidate1_bias, p_candidate1, t_stat, winner) %>% 
+  DT::datatable()
 ```
 
