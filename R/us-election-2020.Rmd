@@ -55,16 +55,20 @@ predict_state_winners <- function(df_polls,
            last = max(data$start_date),
            mean = mean(data$pct_diff),
            sd = sd(data$pct_diff),
-           tdist_params = list(MASS::fitdistr(data$pct_diff, densfun = 't', start = list(m=mean,s=sd, df=n), lower=c(-1, 0.001,1))$estimate)
+           candidate1_bias = candidate1_bias,
+           t_test = list(t.test(data$pct_diff - candidate1_bias, alternative = 'less')),
+           #tdist_fitparams = list(MASS::fitdistr(data$pct_diff, densfun = 't', start = list(m=mean,s=sd, df=n), lower=c(-1, 0.001,1))$estimate)
     ) %>% 
-    mutate(tdist_m = tdist_params[['m']],
-           tdist_s = tdist_params[['s']],
-           tdist_df = tdist_params[['df']]) %>% 
-    mutate(tdist_m_corrected = tdist_m - candidate1_bias) %>% 
+    mutate(p_candidate1 = t_test$p.value,
+           t_stat = t_test$statistic) %>% 
+    # mutate(tdist_m = tdist_fitparams[['m']],
+    #        tdist_s = tdist_fitparams[['s']],
+    #        tdist_df = tdist_fitparams[['df']]) %>% 
+    #mutate(tdist_m_corrected = tdist_m - candidate1_bias) %>% 
     mutate(winner = case_when(
-      (tdist_m_corrected > 0) ~ candidate1,
-      (tdist_m_corrected < 0) ~ candidate2,
-      (tdist_m_corrected == 0) ~ 'tie'
+      (p_candidate1 > 0.5) ~ candidate1,
+      (p_candidate1 < 0.5) ~ candidate2,
+      (p_candidate1 == 0.5) ~ 'tie'
     ))
   
   return(df_state_winners)
@@ -155,13 +159,15 @@ The dotted line in the graph represents the average polling bias for the 2016 pr
 
 
 
+## Win probabilities
+
 ```{r}
 year_selected <- 2020
-states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')[1:4]
+states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')
 begin_date <- ymd('2020-10-01')
 min_sample_size <- 400
-candidate1_bias <- + 3.2
-
+candidate1_bias <- +3.2
+#candidate1_bias <- 0
 
 df_state_winners <- df_polls %>% 
   filter(cycle == year_selected) %>%
@@ -172,13 +178,7 @@ df_state_winners <- df_polls %>%
   filter(population == 'lv') %>% 
   predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_bias = candidate1_bias)
 
-df_state_winners
+df_state_winners %>% 
+  dplyr::select(state, n, mean, sd, candidate1_bias, p_candidate1, t_stat, winner)
 ```
-
-
-# TODO
-
-- Add probabilities
-- Fix fit issue when insufficient data points
-
 
