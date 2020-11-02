@@ -198,7 +198,7 @@ plot_prediction_map(df_polls,
                     candidate1 = 'Joseph R. Biden Jr.',
                     candidate2 = 'Donald Trump',
                     states_selected = all_states,
-                    begin_date = ymd('2020-08-01'),
+                    begin_date = ymd('2020-09-01'),
                     min_sample_size = 400,
                     candidate1_bias = 0)
 ```
@@ -212,7 +212,7 @@ plot_prediction_map(df_polls,
                     candidate1 = 'Joseph R. Biden Jr.',
                     candidate2 = 'Donald Trump',
                     states_selected = all_states,
-                    begin_date = ymd('2020-08-01'),
+                    begin_date = ymd('2020-09-01'),
                     min_sample_size = 400,
                     candidate1_bias = +3.2)
 ```
