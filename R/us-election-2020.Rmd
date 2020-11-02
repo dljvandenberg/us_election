@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = FALSE,
 library(tidyverse)
 library(lubridate)
 library(MASS)
+library(usmap)
 
 
 ## SETTINGS
@@ -73,6 +74,37 @@ predict_state_winners <- function(df_polls,
   
   return(df_state_winners)
 }
+
+
+# Model election winner per state based on polls and visualize on map
+plot_prediction_map <- function(df_polls, 
+                                year_selected = 2020,
+                                begin_date = ymd('2020-10-01'),
+                                min_sample_size = 400,
+                                candidate1 = 'Joseph R. Biden Jr.',
+                                candidate2 = 'Donald Trump',
+                                candidate1_bias = +3.2,
+                                states_selected = c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan')){
+  
+  df_state_winners <- df_polls %>% 
+    filter(cycle == year_selected) %>%
+    filter(state %in% states_selected) %>% 
+    filter(str_detect(fte_grade, '^(A|B|C)')) %>% 
+    filter(sample_size >= min_sample_size) %>% 
+    filter(start_date >= begin_date) %>% 
+    filter(population == 'lv') %>% 
+    predict_state_winners(., candidate1 = candidate1, candidate2 = candidate2, candidate1_bias = candidate1_bias)
+  
+  legend_name <- paste0(candidate1, ' win probability')
+  plot <- df_state_winners %>% 
+    {plot_usmap(data = ., values = "p_candidate1", color = "white") + 
+        scale_fill_continuous(low = "red", high = "blue", name = legend_name, label = scales::percent) + 
+        theme(legend.position = "right") +
+        ggtitle('Biden win probabilities',
+                subtitle = paste0('Assuming DEM polling bias of ', candidate1_bias))}
+  
+  return(plot)  
+}
 ```
 
 
@@ -80,8 +112,13 @@ predict_state_winners <- function(df_polls,
 
 ```{r}
 # DATA
+
+# Polls
 df_polls <- readr::read_delim(polls_url, col_types = cols(), delim = ',') %>% 
   mutate_at(c('start_date', 'end_date', 'election_date'), mdy)
+
+# List of states
+all_states <- unique(df_polls$state)
 ```
 
 
@@ -90,24 +127,6 @@ df_polls <- readr::read_delim(polls_url, col_types = cols(), delim = ',') %>%
 
 
 ## Histograms of % votes per candidate
-
-```{r}
-year_selected <- 2020
-state_selected <- 'Pennsylvania'
-begin_date <- ymd('2020-09-14')
-
-title <- paste0(state_selected, ' Polls ', year_selected,  ' (Pollsters rated A- or higher)')
-df_polls %>% 
-  filter(cycle == year_selected) %>%
-  filter(state == state_selected) %>%  
-  filter(str_detect(fte_grade, '^(A)')) %>% 
-  #filter(population == 'lv') %>% 
-  filter(start_date >= begin_date) %>% 
-  {ggplot(., aes(x = pct, fill = candidate_name)) +
-      geom_histogram(binwidth = 1, alpha = 0.6, position = position_identity()) +
-      ggtitle(title)}
-```
-
 
 ```{r}
 year_selected <- 2020
@@ -131,7 +150,7 @@ df_polls %>%
 ```{r}
 year_selected <- 2020
 states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')[1:5]
-begin_date <- ymd('2020-10-13')
+begin_date <- ymd('2020-09-13')
 min_sample_size <- 400
 historical_bias_2016 <- + 3.2
 
@@ -162,34 +181,22 @@ The dotted line in the graph represents the average polling bias for the 2016 pr
 ## Win probabilities
 
 ```{r}
-year_selected <- 2020
-states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 'Colorado', 'New Hampshire', 'Nebraska CD-2')
-begin_date <- ymd('2020-10-01')
-min_sample_size <- 400
-candidate1_bias <- +3.2
-#candidate1_bias <- 0
+# states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 
+#                                         'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 
+#                                         'Colorado', 'New Hampshire', 'Nebraska CD-2')
 
-df_state_winners <- df_polls %>% 
-  filter(cycle == year_selected) %>%
-  filter(state %in% states_selected) %>% 
-  filter(str_detect(fte_grade, '^(A|B|C)')) %>% 
-  filter(sample_size >= min_sample_size) %>% 
-  filter(start_date >= begin_date) %>% 
-  filter(population == 'lv') %>% 
-  predict_state_winners(., candidate1 = 'Joseph R. Biden Jr.', candidate2 = 'Donald Trump', candidate1_bias = candidate1_bias)
+states_to_exclude <- c('Illinois', 'New York', 'Maine CD-1', 'West Virginia', 'Vermont',
+                                                'South Dakota', 'Mississippi', 'Maryland', 'Massachusetts', 'Kentucky',
+                                                'Oklahoma', 'Nebraska CD-2', 'District of Columbia', 'Nebraska CD-1')
+states_selected <- all_states[!all_states %in% states_to_exclude]
 
-df_state_winners %>% 
-  {ggplot(., aes(x = reorder(state, p_candidate1), y = p_candidate1)) +
-      geom_col(aes(fill = winner)) +
-      scale_y_continuous(labels = scales::percent) +
-      coord_flip() +
-      xlab('') +
-      ylab('Biden win probability') +
-      ggtitle('Biden win probabilities',
-              subtitle = paste0('Assuming DEM polling bias of ', candidate1_bias))}
-
-df_state_winners %>% 
-  dplyr::select(state, n, mean, sd, candidate1_bias, p_candidate1, t_stat, winner) %>% 
-  DT::datatable()
+plot_prediction_map(df_polls, 
+                    year_selected = 2020,
+                    candidate1 = 'Joseph R. Biden Jr.',
+                    candidate2 = 'Donald Trump',
+                    states_selected = states_selected,
+                    begin_date = ymd('2020-10-01'),
+                    min_sample_size = 400,
+                    candidate1_bias = +3.2)
 ```
 
