@@ -108,7 +108,7 @@ plot_prediction_map <- function(df_polls,
   legend_name <- paste0(candidate1, ' win probability')
   plot <- df_state_winners %>% 
     {plot_usmap(data = ., values = "p_candidate1", color = "white") + 
-        scale_fill_continuous(low = "red", high = "blue", name = legend_name, label = scales::percent) + 
+        scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0.5, na.value = "grey", name = legend_name, label = scales::percent) + 
         theme(legend.position = "right") +
         ggtitle('Biden win probabilities',
                 subtitle = paste0('Assuming DEM polling bias of ', candidate1_bias))}
@@ -204,7 +204,7 @@ plot_prediction_map(df_polls,
 ```
 
 
-## Assuming consistently biased polls
+## Assuming (consistently) biased polls
 
 ```{r}
 plot_prediction_map(df_polls, 
