@@ -24,6 +24,21 @@ polls_url <- 'https://projects.fivethirtyeight.com/polls-page/president_polls.cs
 
 ## FUNCTIONS
 
+# TryCatch wrapper function for t.test, returning NA in case of error
+t.test.robust <- function(...){
+  
+  # Set defaults to NA
+  outcome <- list(p.value = NA, statistic = NA)
+  tryCatch({
+    outcome <- t.test(...)
+  }, 
+  error=function(cond) {}
+  )
+  
+  return(outcome)
+}
+
+
 # Calculates percentage difference between candidate1 and candidate2, per poll
 calc_candidate_gap <- function(df_polls, 
                                candidate1 = 'Joseph R. Biden Jr.', 
@@ -57,15 +72,10 @@ predict_state_winners <- function(df_polls,
            mean = mean(data$pct_diff),
            sd = sd(data$pct_diff),
            candidate1_bias = candidate1_bias,
-           t_test = list(t.test(data$pct_diff - candidate1_bias, alternative = 'less')),
-           #tdist_fitparams = list(MASS::fitdistr(data$pct_diff, densfun = 't', start = list(m=mean,s=sd, df=n), lower=c(-1, 0.001,1))$estimate)
+           t_test = list(t.test.robust(data$pct_diff - candidate1_bias, alternative = 'less'))
     ) %>% 
     mutate(p_candidate1 = t_test$p.value,
            t_stat = t_test$statistic) %>% 
-    # mutate(tdist_m = tdist_fitparams[['m']],
-    #        tdist_s = tdist_fitparams[['s']],
-    #        tdist_df = tdist_fitparams[['df']]) %>% 
-    #mutate(tdist_m_corrected = tdist_m - candidate1_bias) %>% 
     mutate(winner = case_when(
       (p_candidate1 > 0.5) ~ candidate1,
       (p_candidate1 < 0.5) ~ candidate2,
@@ -178,25 +188,31 @@ The dotted line in the graph represents the average polling bias for the 2016 pr
 
 
 
-## Win probabilities
+# Win probabilities
+
+## Assuming unbiased polls
 
 ```{r}
-# states_selected <- c('Pennsylvania', 'Florida', 'Arizona', 'Wisconsin', 'North Carolina', 
-#                                         'Michigan', 'Minnesota', 'Georgia', 'Nevada', 'Texas', 'Ohio', 
-#                                         'Colorado', 'New Hampshire', 'Nebraska CD-2')
-
-states_to_exclude <- c('Illinois', 'New York', 'Maine CD-1', 'West Virginia', 'Vermont',
-                                                'South Dakota', 'Mississippi', 'Maryland', 'Massachusetts', 'Kentucky',
-                                                'Oklahoma', 'Nebraska CD-2', 'District of Columbia', 'Nebraska CD-1')
-states_selected <- all_states[!all_states %in% states_to_exclude]
-
 plot_prediction_map(df_polls, 
                     year_selected = 2020,
                     candidate1 = 'Joseph R. Biden Jr.',
                     candidate2 = 'Donald Trump',
-                    states_selected = states_selected,
-                    begin_date = ymd('2020-10-01'),
+                    states_selected = all_states,
+                    begin_date = ymd('2020-08-01'),
+                    min_sample_size = 400,
+                    candidate1_bias = 0)
+```
+
+
+## Assuming consistently biased polls
+
+```{r}
+plot_prediction_map(df_polls, 
+                    year_selected = 2020,
+                    candidate1 = 'Joseph R. Biden Jr.',
+                    candidate2 = 'Donald Trump',
+                    states_selected = all_states,
+                    begin_date = ymd('2020-08-01'),
                     min_sample_size = 400,
                     candidate1_bias = +3.2)
 ```
-
